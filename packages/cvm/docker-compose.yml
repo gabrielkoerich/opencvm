@@ -1,0 +1,59 @@
+# Single-VPS stack: redis + worker pool + api + in-container scheduler.
+# All state lives in the shared `cvm-data` volume (SQLite WAL + downloads + backups).
+# Bring up with: docker compose up -d   (no host cron / manual config required)
+
+x-cvm-env: &cvm-env
+  CVM_DATA_DIR: /data
+  CVM_DB_PATH: /data/cvm.sqlite
+  CVM_REDIS_URL: redis://redis:6379/0
+  # S3 offsite backup + brapi prices come from .env (optional)
+  CVM_S3_BUCKET: ${CVM_S3_BUCKET:-}
+  CVM_S3_PREFIX: ${CVM_S3_PREFIX:-cvm-backups}
+  CVM_S3_ENDPOINT: ${CVM_S3_ENDPOINT:-}
+  AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+  AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+  AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-us-east-1}
+  BRAPI_API_KEY: ${BRAPI_API_KEY:-}
+
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redis-data:/data
+
+  api:
+    build: .
+    restart: unless-stopped
+    command: ["python", "-m", "cvm", "serve", "--port", "8000"]
+    environment: *cvm-env
+    ports:
+      - "8000:8000"
+    volumes:
+      - cvm-data:/data
+    depends_on:
+      - redis
+
+  worker:
+    build: .
+    restart: unless-stopped
+    command: ["python", "-m", "cvm", "worker", "-p", "4"]
+    environment: *cvm-env
+    volumes:
+      - cvm-data:/data
+    depends_on:
+      - redis
+
+  scheduler:
+    build: .
+    restart: unless-stopped
+    command: ["python", "-m", "cvm", "schedule"]
+    environment: *cvm-env
+    volumes:
+      - cvm-data:/data
+    depends_on:
+      - redis
+
+volumes:
+  cvm-data:
+  redis-data:
