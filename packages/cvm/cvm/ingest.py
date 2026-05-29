@@ -11,6 +11,7 @@ Normalization rules (the part the old PHP project found painful):
 from __future__ import annotations
 
 import re
+from pathlib import Path
 from typing import cast
 
 import pandas as pd
@@ -19,7 +20,7 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
 from . import download
-from .datasets import DATASETS
+from .datasets import DATASETS, FLOW_STATEMENTS, SCOPES, STATEMENTS
 from .db import Company, Document, Fact, Shares, get_engine, session
 
 _ENCODING = "latin-1"
@@ -47,6 +48,13 @@ def _records(df: pd.DataFrame) -> list[dict[str, object]]:
 
 def _scale(escala: pd.Series) -> pd.Series:
     return escala.str.upper().map(_SCALE).fillna(1.0)
+
+
+def _period_months(ini: pd.Series, fim: pd.Series) -> pd.Series:
+    """Inclusive month span between DT_INI_EXERC and DT_FIM_EXERC (3/6/9/12)."""
+    di = pd.to_datetime(ini, errors="coerce")
+    df = pd.to_datetime(fim, errors="coerce")
+    return (df.dt.year - di.dt.year) * 12 + (df.dt.month - di.dt.month) + 1
 
 
 def _keep_latest(df: pd.DataFrame, keys: list[str]) -> pd.DataFrame:
@@ -96,22 +104,61 @@ def _upsert_companies(session_: Session, df: pd.DataFrame) -> None:
     _upsert(session_, Company, rows, ["cd_cvm"], ["name", "cnpj"])
 
 
-def ingest_statement(dataset_key: str, statement: str, scope: str, year: int) -> int:
-    """Download (cached), parse and upsert one statement/scope/year shard."""
+def ingest_dataset_year(dataset_key: str, year: int) -> dict[str, int]:
+    """Download one dataset-year ZIP, parse every member, then delete the ZIP.
+
+    Download → parse → delete: the ZIP and each extracted CSV are removed as soon
+    as they are consumed, so a full backfill never accumulates on disk.
+    """
+    counts = {"facts": 0, "shares": 0}
+    with download.temp_dataset(dataset_key, year) as zip_path:
+        for statement in STATEMENTS:
+            for scope in SCOPES:
+                counts["facts"] += _ingest_statement(
+                    zip_path, dataset_key, statement, scope, year
+                )
+        counts["shares"] += _ingest_shares(zip_path, dataset_key, year)
+    return counts
+
+
+def _ingest_statement(
+    zip_path: Path, dataset_key: str, statement: str, scope: str, year: int
+) -> int:
+    """Parse + upsert one statement/scope CSV from an already-downloaded ZIP."""
     ds = DATASETS[dataset_key]
-    zip_path, _ = download.download_dataset(dataset_key, year)
     member = ds.statement_csv(statement, scope, year)
     csv_path = download.extract_member(zip_path, member)
     if csv_path is None:
         return 0
+    try:
+        return _store_statement(csv_path, dataset_key, statement, scope, year)
+    finally:
+        csv_path.unlink(missing_ok=True)
 
+
+def _store_statement(
+    csv_path: Path, dataset_key: str, statement: str, scope: str, year: int
+) -> int:
     df = _read_csv(str(csv_path))
     if df.empty or "CD_CONTA" not in df.columns:
         return 0
 
-    df = _keep_latest(df, ["CD_CVM", "DT_FIM_EXERC"])
     df = df.dropna(subset=["CD_CVM", "DT_FIM_EXERC", "CD_CONTA", "VL_CONTA"])
-    df = df[df["CD_CVM"].str.strip() != ""]
+    df = df[df["CD_CVM"].str.strip() != ""].copy()
+
+    # Flow statements report both year-to-date (3/6/9/12) and quarter-alone (3)
+    # spans for the same period-end. Keep only standalone quarters and full years;
+    # balance sheets are point-in-time snapshots (months = 0).
+    if statement in FLOW_STATEMENTS and "DT_INI_EXERC" in df.columns:
+        df["_months"] = _period_months(df["DT_INI_EXERC"], df["DT_FIM_EXERC"])
+        df = df[df["_months"].isin([3, 12])]
+    else:
+        df["_months"] = 0
+    if df.empty:
+        return 0
+    df["_months"] = df["_months"].astype(int)
+
+    df = _keep_latest(df, ["CD_CVM", "DT_FIM_EXERC", "_months"])
 
     value = pd.to_numeric(df["VL_CONTA"], errors="coerce") * _scale(df["ESCALA_MOEDA"])
     df = df.assign(_value=value).dropna(subset=["_value"])
@@ -126,6 +173,7 @@ def ingest_statement(dataset_key: str, statement: str, scope: str, year: int) ->
                 "statement": statement,
                 "scope": scope,
                 "period": period,
+                "period_months": int(str(d["_months"])),
                 "fiscal_year": int(period[:4]),
                 "account_code": str(d["CD_CONTA"]),
                 "account_desc": str(d["DS_CONTA"]),
@@ -140,21 +188,26 @@ def ingest_statement(dataset_key: str, statement: str, scope: str, year: int) ->
             s,
             Fact,
             rows,
-            ["cd_cvm", "statement", "scope", "period", "account_code"],
+            ["cd_cvm", "statement", "scope", "period", "period_months", "account_code"],
             ["value", "version", "account_desc", "fiscal_year", "dataset"],
         )
     return n
 
 
-def ingest_shares(dataset_key: str, year: int) -> int:
-    """Parse composicao_capital (shares outstanding) from a DFP/ITR zip."""
+def _ingest_shares(zip_path: Path, dataset_key: str, year: int) -> int:
+    """Parse composicao_capital (shares outstanding) from an extracted ZIP."""
     ds = DATASETS[dataset_key]
-    zip_path, _ = download.download_dataset(dataset_key, year)
     member = ds.member_csv("composicao_capital", year)
     csv_path = download.extract_member(zip_path, member)
     if csv_path is None:
         return 0
+    try:
+        return _store_shares(csv_path)
+    finally:
+        csv_path.unlink(missing_ok=True)
 
+
+def _store_shares(csv_path: Path) -> int:
     df = _read_csv(str(csv_path))
     if df.empty:
         return 0

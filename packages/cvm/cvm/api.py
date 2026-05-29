@@ -11,7 +11,7 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import FastAPI, Query, Request, Response
-from sqlalchemy import func, select
+from sqlalchemy import ColumnElement, and_, func, or_, select
 
 from . import cache, indicators
 from .db import Company, Document, Fact, Indicator, Shares, Ticker, session
@@ -21,6 +21,55 @@ app = FastAPI(title="CVM Fundamentals API", version="0.1.0")
 
 JSONDict = dict[str, object]
 JSONList = list[dict[str, object]]
+
+_FREQ_MONTHS = {"quarterly": 3, "annual": 12}
+
+
+def _months_for(freq: str) -> int:
+    return _FREQ_MONTHS.get(freq, 12)
+
+
+def _period_clause(freq: str) -> ColumnElement[bool]:
+    """Match flow rows for the frequency plus the relevant balance snapshots.
+
+    Balance sheets are always point-in-time (``period_months == 0``); under the
+    annual view only year-end snapshots are kept, quarterly keeps every quarter.
+    """
+    months = _months_for(freq)
+    if freq == "quarterly":
+        return Fact.period_months.in_([months, 0])
+    return or_(
+        Fact.period_months == months,
+        and_(Fact.period_months == 0, Fact.period.like("%-12-31")),
+    )
+
+
+def _pct(curr: float | None, prev: float | None) -> float | None:
+    if curr is None or prev is None or prev == 0:
+        return None
+    return (curr - prev) / abs(prev)
+
+
+def _growth(
+    periods: dict[str, dict[str, float | None]], include_qoq: bool
+) -> dict[str, dict[str, dict[str, float | None]]]:
+    """Per-period QoQ (previous period) and YoY (same period, prior year) %."""
+    ordered = sorted(periods)
+    out: dict[str, dict[str, dict[str, float | None]]] = {}
+    for i, period in enumerate(ordered):
+        prev = ordered[i - 1] if i > 0 else None
+        yoy_key = f"{int(period[:4]) - 1}{period[4:]}"
+        row: dict[str, dict[str, float | None]] = {}
+        for name, val in periods[period].items():
+            qoq = (
+                _pct(val, periods[prev].get(name))
+                if include_qoq and prev is not None
+                else None
+            )
+            yoy = _pct(val, periods[yoy_key].get(name)) if yoy_key in periods else None
+            row[name] = {"qoq": qoq, "yoy": yoy}
+        out[period] = row
+    return out
 
 
 def _cache_headers(request: Request, response: Response) -> Response | None:
@@ -103,6 +152,7 @@ def statements(
     response: Response,
     statement: str = "DRE",
     scope: str = "con",
+    freq: str = "annual",
     year: int | None = None,
 ) -> JSONList | Response:
     if (cached := _cache_headers(request, response)) is not None:
@@ -112,6 +162,7 @@ def statements(
             Fact.cd_cvm == cd_cvm,
             Fact.statement == statement,
             Fact.scope == scope,
+            _period_clause(freq),
         )
         if year:
             stmt = stmt.where(Fact.fiscal_year == year)
@@ -134,6 +185,7 @@ def account_series(
     request: Request,
     response: Response,
     scope: str = "con",
+    freq: str = "annual",
 ) -> JSONDict | Response:
     """Time series for one account code, e.g. 3.05 (operating result/EBIT)."""
     if (cached := _cache_headers(request, response)) is not None:
@@ -145,15 +197,30 @@ def account_series(
                 Fact.cd_cvm == cd_cvm,
                 Fact.scope == scope,
                 Fact.account_code == code,
+                _period_clause(freq),
             )
             .order_by(Fact.period.desc())
         )
         rows = list(s.execute(stmt).scalars())
+        values: dict[str, float | None] = {f.period: f.value for f in rows}
+        growth = _growth(
+            {p: {"value": v} for p, v in values.items()},
+            include_qoq=(freq == "quarterly"),
+        )
         return {
             "cd_cvm": cd_cvm,
             "account_code": code,
             "account_desc": rows[0].account_desc if rows else None,
-            "series": [{"period": f.period, "value": f.value} for f in rows],
+            "freq": freq,
+            "series": [
+                {
+                    "period": f.period,
+                    "value": f.value,
+                    "qoq": growth[f.period]["value"]["qoq"],
+                    "yoy": growth[f.period]["value"]["yoy"],
+                }
+                for f in rows
+            ],
         }
 
 
@@ -163,14 +230,18 @@ def company_indicators(
     request: Request,
     response: Response,
     scope: str = "con",
+    freq: str = "annual",
     year: int | None = None,
     price: float | None = None,
 ) -> JSONDict | Response:
     if price is None and (cached := _cache_headers(request, response)) is not None:
         return cached
+    months = _months_for(freq)
     with session() as s:
         stmt = select(Indicator).where(
-            Indicator.cd_cvm == cd_cvm, Indicator.scope == scope
+            Indicator.cd_cvm == cd_cvm,
+            Indicator.scope == scope,
+            Indicator.period_months == months,
         )
         if year:
             stmt = stmt.where(Indicator.fiscal_year == year)
@@ -181,6 +252,8 @@ def company_indicators(
         for r in rows:
             by_period.setdefault(r.period, {})[r.name] = r.value
 
+        growth = _growth(by_period, include_qoq=(freq == "quarterly"))
+
         # Optionally layer live price-based ratios onto the latest period.
         if price is not None and by_period:
             latest = max(by_period)
@@ -190,6 +263,7 @@ def company_indicators(
                         Fact.cd_cvm == cd_cvm,
                         Fact.scope == scope,
                         Fact.period == latest,
+                        Fact.period_months.in_([months, 0]),
                     )
                 ).scalars()
             )
@@ -205,7 +279,13 @@ def company_indicators(
             deriv = indicators.derived(li)
             by_period[latest].update(indicators.price_based(li, deriv, price, sh))
 
-        return {"cd_cvm": cd_cvm, "scope": scope, "periods": by_period}
+        return {
+            "cd_cvm": cd_cvm,
+            "scope": scope,
+            "freq": freq,
+            "periods": by_period,
+            "growth": growth,
+        }
 
 
 @app.get("/companies/{cd_cvm}/documents", response_model=None)

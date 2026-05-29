@@ -1,90 +1,60 @@
-"""Cached, conditional downloader for CVM ZIPs / CSVs.
+"""Disk-frugal downloader for CVM ZIPs / CSVs.
 
-Each download remembers the server's ``ETag`` / ``Last-Modified`` next to the
-file. Subsequent fetches send conditional headers, so unchanged shards return
-``304`` and we reuse the cached copy — cheap enough to run daily over the whole
-backfill.
+Each shard is fetched into a throwaway temp dir, parsed, then deleted — nothing
+is cached between syncs. Peak disk usage stays at a single shard (plus the CSV
+currently being parsed) instead of hoarding the entire multi-year backfill.
 """
 
 from __future__ import annotations
 
-import json
+import os
+import shutil
+import tempfile
 import zipfile
 from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import cast
 
 import requests
 
-from . import config
-from .datasets import DATASETS, Dataset
+from .datasets import DATASETS
 
 _TIMEOUT = 120
 _HEADERS = {"User-Agent": "bean-cvm/0.1 (+https://dados.cvm.gov.br)"}
 
 
-def _meta_path(target: Path) -> Path:
-    return target.with_suffix(target.suffix + ".meta.json")
-
-
-def _load_meta(target: Path) -> dict[str, str]:
-    mp = _meta_path(target)
-    if mp.exists():
-        try:
-            return cast("dict[str, str]", json.loads(mp.read_text()))
-        except json.JSONDecodeError:
-            return {}
-    return {}
-
-
-def _save_meta(target: Path, meta: dict[str, str]) -> None:
-    _meta_path(target).write_text(json.dumps(meta))
-
-
-def fetch(url: str, target: Path) -> tuple[Path, bool]:
-    """Download ``url`` to ``target`` unless unchanged. Returns (path, changed)."""
-    target.parent.mkdir(parents=True, exist_ok=True)
-    meta = _load_meta(target)
-    headers = dict(_HEADERS)
-    if target.exists():
-        if etag := meta.get("etag"):
-            headers["If-None-Match"] = etag
-        if last_mod := meta.get("last_modified"):
-            headers["If-Modified-Since"] = last_mod
-
-    resp = requests.get(url, headers=headers, timeout=_TIMEOUT, stream=True)
-    if resp.status_code == 304 and target.exists():
-        return target, False
+def _download_to(url: str, target: Path) -> None:
+    resp = requests.get(url, headers=_HEADERS, timeout=_TIMEOUT, stream=True)
     resp.raise_for_status()
-
-    tmp = target.with_suffix(target.suffix + ".part")
     chunks = cast("Iterator[bytes]", resp.iter_content(chunk_size=1 << 16))
-    with open(tmp, "wb") as fh:
-        for chunk in chunks:
-            fh.write(chunk)
-    tmp.replace(target)
-
-    new_meta: dict[str, str] = {}
-    if etag := resp.headers.get("ETag"):
-        new_meta["etag"] = etag
-    if last_mod := resp.headers.get("Last-Modified"):
-        new_meta["last_modified"] = last_mod
-    _save_meta(target, new_meta)
-    return target, True
+    fd, tmp_name = tempfile.mkstemp(dir=str(target.parent), suffix=".part")
+    tmp = Path(tmp_name)
+    try:
+        with os.fdopen(fd, "wb") as fh:
+            for chunk in chunks:
+                fh.write(chunk)
+        tmp.replace(target)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
 
 
-def download_dataset(key: str, year: int | None = None) -> tuple[Path, bool]:
-    """Fetch a dataset shard (ZIP or single CSV) into the download cache."""
-    ds: Dataset = DATASETS[key]
-    url = ds.url(year)
-    name = Path(url).name
-    sub = key if not ds.yearly else f"{key}/{year}"
-    target = config.DOWNLOAD_DIR / sub / name
-    return fetch(url, target)
+@contextmanager
+def temp_dataset(key: str, year: int | None = None) -> Iterator[Path]:
+    """Download a dataset shard into a temp dir; delete the whole dir on exit."""
+    url = DATASETS[key].url(year)
+    tmpdir = Path(tempfile.mkdtemp(prefix="cvm-dl-"))
+    target = tmpdir / Path(url).name
+    try:
+        _download_to(url, target)
+        yield target
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
 
 
 def extract_member(zip_path: Path, member: str) -> Path | None:
-    """Extract a single CSV from a cached ZIP next to it; returns the path or None."""
+    """Extract a single CSV from a ZIP next to it; returns the path or None."""
     out_dir = zip_path.with_suffix("")
     out_dir.mkdir(parents=True, exist_ok=True)
     out = out_dir / member

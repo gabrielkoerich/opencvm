@@ -75,6 +75,7 @@ class Fact(Base):
     statement: Mapped[str] = mapped_column(String)  # DRE / BPA / BPP / DFC_* / DVA
     scope: Mapped[str] = mapped_column(String)  # con / ind
     period: Mapped[str] = mapped_column(String, index=True)  # DT_FIM_EXERC (YYYY-MM-DD)
+    period_months: Mapped[int] = mapped_column(Integer, index=True)  # 0 stock, 3 quarter, 12 annual
     fiscal_year: Mapped[int] = mapped_column(Integer, index=True)
     account_code: Mapped[str] = mapped_column(String, index=True)
     account_desc: Mapped[str] = mapped_column(String)
@@ -87,6 +88,7 @@ class Fact(Base):
             "statement",
             "scope",
             "period",
+            "period_months",
             "account_code",
             name="uq_fact",
         ),
@@ -138,12 +140,15 @@ class Indicator(Base):
     cd_cvm: Mapped[int] = mapped_column(Integer, index=True)
     scope: Mapped[str] = mapped_column(String)
     period: Mapped[str] = mapped_column(String, index=True)
+    period_months: Mapped[int] = mapped_column(Integer, index=True)  # 3 quarter, 12 annual
     fiscal_year: Mapped[int] = mapped_column(Integer, index=True)
     name: Mapped[str] = mapped_column(String, index=True)
     value: Mapped[float | None] = mapped_column(Float)
 
     __table_args__: tuple[object, ...] = (
-        UniqueConstraint("cd_cvm", "scope", "period", "name", name="uq_indicator"),
+        UniqueConstraint(
+            "cd_cvm", "scope", "period", "period_months", "name", name="uq_indicator"
+        ),
     )
 
 

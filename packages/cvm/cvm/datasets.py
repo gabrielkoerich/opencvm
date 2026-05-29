@@ -21,6 +21,11 @@ _BASE = "https://dados.cvm.gov.br/dados/CIA_ABERTA"
 STATEMENTS: tuple[str, ...] = ("BPA", "BPP", "DRE", "DFC_MD", "DFC_MI", "DVA")
 SCOPES: tuple[str, ...] = ("con", "ind")  # consolidated vs individual
 
+# Flow statements report a period span (DT_INI..DT_FIM) — revenue, cash flow, etc.
+# Stock statements are point-in-time snapshots (balance sheets), no DT_INI.
+FLOW_STATEMENTS: tuple[str, ...] = ("DRE", "DFC_MD", "DFC_MI", "DVA")
+STOCK_STATEMENTS: tuple[str, ...] = ("BPA", "BPP")
+
 
 @dataclass(frozen=True)
 class Dataset:
