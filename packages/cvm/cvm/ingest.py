@@ -131,13 +131,13 @@ def _ingest_statement(
     if csv_path is None:
         return 0
     try:
-        return _store_statement(csv_path, dataset_key, statement, scope, year)
+        return _store_statement(csv_path, dataset_key, statement, scope)
     finally:
         csv_path.unlink(missing_ok=True)
 
 
 def _store_statement(
-    csv_path: Path, dataset_key: str, statement: str, scope: str, year: int
+    csv_path: Path, dataset_key: str, statement: str, scope: str
 ) -> int:
     df = _read_csv(str(csv_path))
     if df.empty or "CD_CONTA" not in df.columns:
@@ -254,13 +254,11 @@ def _store_shares(csv_path: Path) -> int:
 
 def ingest_ipe(year: int) -> int:
     """Parse the IPE document feed (fatos relevantes, comunicados) for a year."""
-    zip_path, _ = download.download_dataset("ipe", year)
-    member = f"ipe_cia_aberta_{year}.csv"
-    csv_path = download.extract_member(zip_path, member)
-    if csv_path is None:
-        return 0
-
-    df = _read_csv(str(csv_path))
+    with download.temp_dataset("ipe", year) as zip_path:
+        csv_path = download.extract_member(zip_path, f"ipe_cia_aberta_{year}.csv")
+        if csv_path is None:
+            return 0
+        df = _read_csv(str(csv_path))
     if df.empty or "Codigo_CVM" not in df.columns:
         return 0
 
@@ -294,8 +292,8 @@ def ingest_ipe(year: int) -> int:
 
 def ingest_cad() -> int:
     """Enrich companies with sector/situation from the CAD registry."""
-    zip_path, _ = download.download_dataset("cad")
-    df = _read_csv(str(zip_path))
+    with download.temp_dataset("cad") as csv_path:
+        df = _read_csv(str(csv_path))
     if df.empty or "CD_CVM" not in df.columns:
         return 0
     df = df.dropna(subset=["CD_CVM"])
@@ -314,6 +312,4 @@ def ingest_cad() -> int:
         )
 
     with session() as s:
-        return _upsert(
-            s, Company, rows, ["cd_cvm"], ["sector", "situation", "cnpj"]
-        )
+        return _upsert(s, Company, rows, ["cd_cvm"], ["sector", "situation", "cnpj"])

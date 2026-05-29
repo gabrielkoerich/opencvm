@@ -11,7 +11,7 @@ from datetime import date
 
 from . import compute, ingest
 from .cache import bump_version, set_meta
-from .datasets import DATASETS, FINANCIAL_DATASETS, SCOPES, STATEMENTS
+from .datasets import DATASETS, FINANCIAL_DATASETS
 
 
 def _financial_years(full: bool, through: int) -> dict[str, list[int]]:
@@ -39,12 +39,8 @@ def enqueue_sync(full: bool = False, through: int | None = None) -> int:
 
     for key, years in _financial_years(full, through).items():
         for year in years:
-            tasks.parse_shares.send(key, year)
+            tasks.parse_dataset_year.send(key, year)
             n += 1
-            for statement in STATEMENTS:
-                for scope in SCOPES:
-                    tasks.parse_statement_shard.send(key, statement, scope, year)
-                    n += 1
 
     for year in _ipe_years(full, through):
         tasks.parse_ipe.send(year)
@@ -67,12 +63,9 @@ def run_inline(full: bool = False, through: int | None = None) -> dict[str, int]
 
     for key, years in _financial_years(full, through).items():
         for year in years:
-            for statement in STATEMENTS:
-                for scope in SCOPES:
-                    counts["facts"] += ingest.ingest_statement(
-                        key, statement, scope, year
-                    )
-            counts["shares"] += ingest.ingest_shares(key, year)
+            result = ingest.ingest_dataset_year(key, year)
+            counts["facts"] += result["facts"]
+            counts["shares"] += result["shares"]
 
     for year in _ipe_years(full, through):
         counts["ipe"] += ingest.ingest_ipe(year)

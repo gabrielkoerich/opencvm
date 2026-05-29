@@ -22,9 +22,8 @@ STATEMENTS: tuple[str, ...] = ("BPA", "BPP", "DRE", "DFC_MD", "DFC_MI", "DVA")
 SCOPES: tuple[str, ...] = ("con", "ind")  # consolidated vs individual
 
 # Flow statements report a period span (DT_INI..DT_FIM) — revenue, cash flow, etc.
-# Stock statements are point-in-time snapshots (balance sheets), no DT_INI.
+# Everything else (balance sheets) is a point-in-time snapshot with no DT_INI.
 FLOW_STATEMENTS: tuple[str, ...] = ("DRE", "DFC_MD", "DFC_MI", "DVA")
-STOCK_STATEMENTS: tuple[str, ...] = ("BPA", "BPP")
 
 
 @dataclass(frozen=True)
@@ -90,15 +89,3 @@ DATASETS: dict[str, Dataset] = {
 
 # Datasets whose CSVs feed the long-format facts table.
 FINANCIAL_DATASETS: tuple[str, ...] = ("dfp", "itr")
-
-
-def financial_shards(through: int | None = None) -> list[tuple[str, int, str, str]]:
-    """All (dataset, year, statement, scope) tuples for a full financial backfill."""
-    shards: list[tuple[str, int, str, str]] = []
-    for key in FINANCIAL_DATASETS:
-        ds = DATASETS[key]
-        for year in ds.years(through):
-            for statement in STATEMENTS:
-                for scope in SCOPES:
-                    shards.append((key, year, statement, scope))
-    return shards

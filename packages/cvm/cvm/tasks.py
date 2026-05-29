@@ -25,14 +25,9 @@ _BACKUP_WINDOW = 300  # seconds: at most one backup per window during a backfill
 
 
 @dramatiq.actor(max_retries=3)
-def parse_statement_shard(dataset: str, statement: str, scope: str, year: int) -> None:
-    ingest.ingest_statement(dataset, statement, scope, year)
+def parse_dataset_year(dataset: str, year: int) -> None:
+    ingest.ingest_dataset_year(dataset, year)
     enqueue_backup()
-
-
-@dramatiq.actor(max_retries=3)
-def parse_shares(dataset: str, year: int) -> None:
-    ingest.ingest_shares(dataset, year)
 
 
 @dramatiq.actor(max_retries=3)
