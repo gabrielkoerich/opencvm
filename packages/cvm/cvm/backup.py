@@ -1,8 +1,9 @@
 """SQLite backups: consistent snapshot + offsite S3 upload + local rotation.
 
 ``VACUUM INTO`` produces a transactionally-consistent copy even while workers are
-writing (WAL-safe), so this is safe to call after parse jobs. If no S3 bucket is
-configured, only the local snapshot is kept.
+writing (WAL-safe), so this is safe to call after parse jobs. The automated path
+(``to_s3=True``) is a no-op unless an S3 bucket is configured; a local-only copy
+on the same volume isn't a real backup and would pile up during a full backfill.
 """
 
 from __future__ import annotations
@@ -56,6 +57,11 @@ def upload_s3(path: Path) -> str | None:
 
 
 def backup_now(to_s3: bool = True) -> dict[str, object]:
+    # The automated path asks for S3; without a bucket a local-only snapshot is
+    # just a second copy on the same disk, so skip it (a full backfill would
+    # otherwise pile up `BACKUP_KEEP` multi-GB VACUUM copies on the volume).
+    if to_s3 and not config.S3_BUCKET:
+        return {"snapshot": None, "uploaded": None, "rotated": 0}
     snap = snapshot()
     if snap is None:
         return {"snapshot": None, "uploaded": None, "rotated": 0}
