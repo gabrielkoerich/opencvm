@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from . import compute, ingest
+from . import compute, ingest, tickers
 from .cache import bump_version, set_meta
 from .datasets import DATASETS, FINANCIAL_DATASETS
 
@@ -46,6 +46,9 @@ def enqueue_sync(full: bool = False, through: int | None = None) -> int:
         tasks.parse_ipe.send(year)
         n += 1
 
+    tasks.refresh_tickers.send()
+    n += 1
+
     tasks.recompute_all.send()
     n += 1
     set_meta("last_sync", date.today().isoformat())
@@ -57,7 +60,7 @@ def enqueue_sync(full: bool = False, through: int | None = None) -> int:
 
 def run_inline(full: bool = False, through: int | None = None) -> dict[str, int]:
     through = through or date.today().year
-    counts = {"cad": 0, "facts": 0, "shares": 0, "ipe": 0, "companies": 0}
+    counts = {"cad": 0, "facts": 0, "shares": 0, "ipe": 0, "tickers": 0, "companies": 0}
 
     counts["cad"] = ingest.ingest_cad()
 
@@ -69,6 +72,8 @@ def run_inline(full: bool = False, through: int | None = None) -> dict[str, int]
 
     for year in _ipe_years(full, through):
         counts["ipe"] += ingest.ingest_ipe(year)
+
+    counts["tickers"] = tickers.refresh_tickers()
 
     for cd in compute.all_company_ids():
         compute.compute_and_store(cd)

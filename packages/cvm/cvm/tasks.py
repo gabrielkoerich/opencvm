@@ -11,7 +11,7 @@ import dramatiq
 import redis
 from dramatiq.brokers.redis import RedisBroker
 
-from . import backup, compute, config, ingest
+from . import backup, compute, config, ingest, tickers
 
 broker = RedisBroker(url=config.REDIS_URL)
 dramatiq.set_broker(broker)
@@ -39,6 +39,11 @@ def parse_ipe(year: int) -> None:
 @dramatiq.actor(max_retries=3)
 def parse_cad() -> None:
     ingest.ingest_cad()
+
+
+@dramatiq.actor(max_retries=2, time_limit=600_000)
+def refresh_tickers() -> None:
+    tickers.refresh_tickers()
 
 
 @dramatiq.actor(max_retries=2)
