@@ -4,6 +4,7 @@ No DB, no network — exercises line_items / derived / per_share / price_based
 against synthetic FactRow data so changes to the formulas can't silently break
 real fundamentals output.
 """
+# pyright: reportUnknownMemberType=false
 
 from __future__ import annotations
 

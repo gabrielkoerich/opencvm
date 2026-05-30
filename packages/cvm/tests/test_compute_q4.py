@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from cvm.compute import _derive_q4_rows
+from cvm.compute import _derive_q4_rows  # pyright: ignore[reportPrivateUsage]
 
 
 @dataclass

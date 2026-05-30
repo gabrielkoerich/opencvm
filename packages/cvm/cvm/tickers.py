@@ -114,7 +114,8 @@ def _store(rows: list[dict[str, object]]) -> int:
 def _known_cd_cvm() -> set[int]:
     """cd_cvm already ingested into companies; tickers FK requires it."""
     with session() as s:
-        return {cd for (cd,) in s.execute(select(Company.cd_cvm)).all()}
+        rows = cast(list[tuple[int]], s.execute(select(Company.cd_cvm)).all())
+        return {cd for (cd,) in rows}
 
 
 def refresh_from_b3() -> int:
