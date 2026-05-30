@@ -1,22 +1,24 @@
-# Single-VPS stack: redis + worker pool + api + in-container scheduler.
-# All state lives in the shared `cvm-data` volume (SQLite WAL + downloads + backups).
+# Single-VPS stack: redis + worker pool + api + in-container scheduler + litestream.
+# All state lives in the shared `cvm-data` volume (SQLite WAL + downloads).
+# Litestream replicates cvm.sqlite to R2 continuously and rebuilds it on cold boot.
 # Bring up with: docker compose up -d   (no host cron / manual config required)
 
 x-cvm-env: &cvm-env
   CVM_DATA_DIR: /data
   CVM_DB_PATH: /data/cvm.sqlite
   CVM_REDIS_URL: redis://redis:6379/0
-  # S3 offsite backup + brapi prices come from .env (optional)
-  CVM_S3_BUCKET: ${CVM_S3_BUCKET:-}
-  CVM_S3_PREFIX: ${CVM_S3_PREFIX:-cvm-backups}
-  CVM_S3_ENDPOINT: ${CVM_S3_ENDPOINT:-}
   CVM_BACKUP_KEEP: ${CVM_BACKUP_KEEP:-2}
-  AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
-  AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
-  AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-us-east-1}
   BRAPI_API_KEY: ${BRAPI_API_KEY:-}
   CVM_RATE_LIMIT: ${CVM_RATE_LIMIT:-60/minute}
   CVM_CORS_ORIGINS: ${CVM_CORS_ORIGINS:-*}
+
+x-litestream-env: &litestream-env
+  LITESTREAM_BUCKET: ${LITESTREAM_BUCKET:-}
+  LITESTREAM_PREFIX: ${LITESTREAM_PREFIX:-opencvm}
+  LITESTREAM_ENDPOINT: ${LITESTREAM_ENDPOINT:-}
+  LITESTREAM_REGION: ${LITESTREAM_REGION:-auto}
+  LITESTREAM_ACCESS_KEY_ID: ${LITESTREAM_ACCESS_KEY_ID:-}
+  LITESTREAM_SECRET_ACCESS_KEY: ${LITESTREAM_SECRET_ACCESS_KEY:-}
 
 services:
   redis:
@@ -24,6 +26,49 @@ services:
     restart: unless-stopped
     volumes:
       - redis-data:/data
+
+  # One-shot bootstrap: pulls the latest replica of cvm.sqlite from R2 onto the
+  # shared volume *only if the file isn't already there*. All long-running
+  # services wait for this to complete successfully before starting.
+  litestream-restore:
+    image: litestream/litestream:0.3.13
+    environment: *litestream-env
+    volumes:
+      - cvm-data:/data
+      - ./litestream.yml:/etc/litestream.yml:ro
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        if [ -z "$$LITESTREAM_BUCKET" ]; then
+          echo "litestream: no bucket configured, skipping restore"; exit 0;
+        fi
+        if [ -f /data/cvm.sqlite ]; then
+          echo "litestream: /data/cvm.sqlite exists, skipping restore"; exit 0;
+        fi
+        echo "litestream: restoring from s3://$$LITESTREAM_BUCKET/$$LITESTREAM_PREFIX/cvm.sqlite"
+        litestream restore -config /etc/litestream.yml -if-replica-exists /data/cvm.sqlite
+
+  # Long-running: tails the SQLite WAL and ships every frame to R2 within seconds.
+  # If no bucket is configured the container exits cleanly (no-op replication).
+  litestream:
+    image: litestream/litestream:0.3.13
+    restart: unless-stopped
+    environment: *litestream-env
+    volumes:
+      - cvm-data:/data
+      - ./litestream.yml:/etc/litestream.yml:ro
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        if [ -z "$$LITESTREAM_BUCKET" ]; then
+          echo "litestream: no bucket configured, replication disabled";
+          # Sleep forever so docker doesn't restart-loop us.
+          exec sleep infinity;
+        fi
+        exec litestream replicate -config /etc/litestream.yml
+    depends_on:
+      litestream-restore:
+        condition: service_completed_successfully
 
   api:
     build: .
@@ -35,7 +80,10 @@ services:
     volumes:
       - cvm-data:/data
     depends_on:
-      - redis
+      redis:
+        condition: service_started
+      litestream-restore:
+        condition: service_completed_successfully
 
   worker:
     build: .
@@ -45,7 +93,10 @@ services:
     volumes:
       - cvm-data:/data
     depends_on:
-      - redis
+      redis:
+        condition: service_started
+      litestream-restore:
+        condition: service_completed_successfully
 
   scheduler:
     build: .
@@ -55,7 +106,10 @@ services:
     volumes:
       - cvm-data:/data
     depends_on:
-      - redis
+      redis:
+        condition: service_started
+      litestream-restore:
+        condition: service_completed_successfully
 
 volumes:
   cvm-data:

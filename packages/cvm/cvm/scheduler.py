@@ -18,16 +18,15 @@ from apscheduler.triggers.cron import (  # pyright: ignore[reportMissingTypeStub
 )
 
 from . import sync
-from .backup import backup_now
 from .db import init_db
 
 log = logging.getLogger("cvm.scheduler")
 
-# Defaults: daily incremental at 09:00, weekly full backfill Sun 04:00, nightly backup 03:00.
+# Defaults: daily incremental at 09:00, weekly full backfill Sun 04:00.
+# Offsite backups are handled by the litestream sidecar (continuous, not cron).
 DAILY_HOUR = int(os.environ.get("CVM_DAILY_HOUR", "9"))
 WEEKLY_FULL_DOW = os.environ.get("CVM_WEEKLY_FULL_DOW", "sun")
 WEEKLY_FULL_HOUR = int(os.environ.get("CVM_WEEKLY_FULL_HOUR", "4"))
-BACKUP_HOUR = int(os.environ.get("CVM_BACKUP_HOUR", "3"))
 
 
 def _daily() -> None:
@@ -40,10 +39,6 @@ def _weekly_full() -> None:
     sync.enqueue_sync(full=True)
 
 
-def _nightly_backup() -> None:
-    log.info("nightly backup: %s", backup_now(to_s3=True))
-
-
 def run() -> None:
     logging.basicConfig(level=logging.INFO)
     init_db()
@@ -54,8 +49,5 @@ def run() -> None:
         CronTrigger(day_of_week=WEEKLY_FULL_DOW, hour=WEEKLY_FULL_HOUR, minute=0),
         id="weekly_full",
     )
-    scheduler.add_job(  # pyright: ignore[reportUnknownMemberType]
-        _nightly_backup, CronTrigger(hour=BACKUP_HOUR, minute=0), id="backup"
-    )
-    log.info("scheduler started (daily=%dh, backup=%dh UTC)", DAILY_HOUR, BACKUP_HOUR)
+    log.info("scheduler started (daily=%dh UTC)", DAILY_HOUR)
     scheduler.start()  # pyright: ignore[reportUnknownMemberType]

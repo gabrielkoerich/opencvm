@@ -1,0 +1,20 @@
+# Litestream config: replicate the live SQLite to R2 continuously and let
+# `litestream restore` rebuild it on a fresh box. Env vars are filled in by
+# the litestream container's environment (see docker-compose.yml).
+#
+# Replica naming: cvm.sqlite is mirrored under
+#   s3://${LITESTREAM_BUCKET}/${LITESTREAM_PREFIX}/cvm.sqlite/
+# (litestream adds its own generation/wal subpaths underneath that key).
+dbs:
+  - path: /data/cvm.sqlite
+    replicas:
+      - type: s3
+        bucket: ${LITESTREAM_BUCKET}
+        path: ${LITESTREAM_PREFIX}/cvm.sqlite
+        endpoint: ${LITESTREAM_ENDPOINT}
+        region: ${LITESTREAM_REGION}
+        access-key-id: ${LITESTREAM_ACCESS_KEY_ID}
+        secret-access-key: ${LITESTREAM_SECRET_ACCESS_KEY}
+        # Keep ~24h of WAL segments + a snapshot per day for 14 days.
+        retention: 336h
+        snapshot-interval: 24h
