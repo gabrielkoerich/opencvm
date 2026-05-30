@@ -36,6 +36,14 @@ S3_ENDPOINT: str = os.environ.get("CVM_S3_ENDPOINT", "")  # for R2/MinIO
 # brapi token (live prices); read lazily by callers that need it.
 BRAPI_TOKEN: str = os.environ.get("BRAPI_API_KEY", "")
 
+# Global API rate limit (slowapi syntax: "<n>/<window>"). Override per-deploy.
+RATE_LIMIT: str = os.environ.get("CVM_RATE_LIMIT", "60/minute")
+
+# CORS — comma-separated list of allowed origins. Use "*" for full open.
+CORS_ORIGINS: list[str] = [
+    o.strip() for o in os.environ.get("CVM_CORS_ORIGINS", "*").split(",") if o.strip()
+]
+
 
 def ensure_dirs() -> None:
     for d in (DATA_DIR, DOWNLOAD_DIR, BACKUP_DIR):

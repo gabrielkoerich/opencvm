@@ -8,16 +8,35 @@ since prices come from a live source (brapi), not CVM.
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, cast
 
 from fastapi import FastAPI, Query, Request, Response
+from fastapi.middleware.cors import CORSMiddleware
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
+from slowapi.util import get_remote_address
 from sqlalchemy import ColumnElement, and_, func, or_, select
 
-from . import cache, indicators
+from . import cache, config, indicators
 from .db import Company, Document, Fact, Indicator, Shares, Ticker, session
 from .indicators import FactRow
 
-app = FastAPI(title="CVM Fundamentals API", version="0.1.0")
+limiter = Limiter(
+    key_func=get_remote_address,
+    default_limits=[config.RATE_LIMIT],
+    storage_uri=config.REDIS_URL,
+)
+app = FastAPI(title="OpenCVM", version="0.1.0")
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # pyright: ignore[reportArgumentType]
+app.add_middleware(SlowAPIMiddleware)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=config.CORS_ORIGINS,
+    allow_methods=["GET"],
+    allow_headers=["*"],
+)
 
 JSONDict = dict[str, object]
 JSONList = list[dict[str, object]]
@@ -315,6 +334,91 @@ def company_documents(
             }
             for d in s.execute(stmt).scalars()
         ]
+
+
+@app.get("/screen", response_model=None)
+def screen(
+    request: Request,
+    response: Response,
+    scope: str = "con",
+    freq: str = "annual",
+    fields: str | None = None,
+    limit: Annotated[int, Query(le=2000)] = 500,
+) -> JSONList | Response:
+    """Latest indicators per ticker, joined to companies, for batch screening.
+
+    `fields` is a comma-separated whitelist; default returns the common headline set.
+    Price-based ratios (P/E, P/B, EV/EBITDA, ...) are not included — callers join
+    them in client-side using a live price source.
+    """
+    if (cached := _cache_headers(request, response)) is not None:
+        return cached
+    wanted = (
+        {n.strip() for n in fields.split(",") if n.strip()}
+        if fields
+        else {
+            "revenue", "ebit", "ebitda", "net_income", "equity", "net_debt",
+            "gross_margin", "operating_margin", "net_margin", "ebitda_margin",
+            "roe", "roa", "roic", "debt_to_equity", "current_ratio",
+        }
+    )
+    months = _months_for(freq)
+
+    def load() -> JSONList:
+        with session() as s:
+            latest_period = (
+                select(Indicator.cd_cvm, func.max(Indicator.period).label("period"))
+                .where(Indicator.scope == scope, Indicator.period_months == months)
+                .group_by(Indicator.cd_cvm)
+                .subquery()
+            )
+            rows = s.execute(
+                select(
+                    Ticker.ticker,
+                    Ticker.kind,
+                    Company.cd_cvm,
+                    Company.name,
+                    Company.sector,
+                    Indicator.period,
+                    Indicator.name,
+                    Indicator.value,
+                )
+                .join(Company, Company.cd_cvm == Ticker.cd_cvm)
+                .join(latest_period, latest_period.c.cd_cvm == Company.cd_cvm)
+                .join(
+                    Indicator,
+                    and_(
+                        Indicator.cd_cvm == Company.cd_cvm,
+                        Indicator.period == latest_period.c.period,
+                        Indicator.scope == scope,
+                        Indicator.period_months == months,
+                    ),
+                )
+                .where(Indicator.name.in_(wanted))
+                .order_by(Ticker.ticker)
+            ).all()
+            by_ticker: dict[str, dict[str, object]] = {}
+            typed_rows = cast(
+                list[tuple[str, str | None, int, str, str | None, str, str, float | None]],
+                rows,
+            )
+            for ticker, kind, cd_cvm, name, sector, period, ind_name, value in typed_rows:
+                slot = by_ticker.setdefault(
+                    ticker,
+                    {
+                        "ticker": ticker,
+                        "kind": kind,
+                        "cd_cvm": cd_cvm,
+                        "name": name,
+                        "sector": sector,
+                        "period": period,
+                    },
+                )
+                slot[ind_name] = value
+            out = list(by_ticker.values())
+            return out[:limit]
+
+    return cache.get_or_set(f"screen:{scope}:{freq}:{fields}:{limit}", load)
 
 
 @app.get("/tickers/{ticker}", response_model=None)
