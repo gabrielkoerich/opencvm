@@ -11,16 +11,19 @@ from __future__ import annotations
 import base64
 import json
 from collections.abc import Mapping
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import cast
 
 import requests
+from sqlalchemy import select
 
-from .db import Ticker, session
+from .db import Company, Ticker, session
 
 _B3 = "https://sistemaswebb3-listados.b3.com.br/listedCompaniesProxy/CompanyCall"
 _HEADERS = {"User-Agent": "Mozilla/5.0 (bean-cvm)"}
 _TIMEOUT = 30
+_DETAIL_WORKERS = 16
 
 
 def _encode(params: Mapping[str, object]) -> str:
@@ -108,20 +111,32 @@ def _store(rows: list[dict[str, object]]) -> int:
     return len(rows)
 
 
+def _known_cd_cvm() -> set[int]:
+    """cd_cvm already ingested into companies; tickers FK requires it."""
+    with session() as s:
+        return {cd for (cd,) in s.execute(select(Company.cd_cvm)).all()}
+
+
 def refresh_from_b3() -> int:
     companies = fetch_b3_companies()
+    known = _known_cd_cvm()
+    targets = [c for c in companies if int(c["cd_cvm"]) in known] if known else companies
+
+    def codes_for(c: dict[str, str]) -> tuple[int, list[str]]:
+        return int(c["cd_cvm"]), fetch_b3_codes(c["cd_cvm"])
+
     rows: list[dict[str, object]] = []
-    for c in companies:
-        cd = int(c["cd_cvm"])
-        for code in fetch_b3_codes(c["cd_cvm"]):
-            rows.append(
-                {
-                    "cd_cvm": cd,
-                    "ticker": code,
-                    "kind": _kind_from_ticker(code),
-                    "source": "b3",
-                }
-            )
+    with ThreadPoolExecutor(max_workers=_DETAIL_WORKERS) as ex:
+        for cd, codes in ex.map(codes_for, targets):
+            for code in codes:
+                rows.append(
+                    {
+                        "cd_cvm": cd,
+                        "ticker": code,
+                        "kind": _kind_from_ticker(code),
+                        "source": "b3",
+                    }
+                )
     return _store(rows)
 
 
