@@ -4,3 +4,5 @@ data/
 *.sqlite-shm
 __pycache__/
 .venv/
+.env
+.envrc
