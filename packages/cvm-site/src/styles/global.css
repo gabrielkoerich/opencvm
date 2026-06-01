@@ -3,17 +3,89 @@
 @import "tailwindcss/theme.css" layer(theme);
 @import "tailwindcss/utilities.css" layer(utilities);
 
-/* Match cvm-ui terminal aesthetic. */
+/* ---------- Type ---------- */
+
 :root {
-  --sl-font: "IBM Plex Sans", system-ui, sans-serif;
-  --sl-font-mono: "IBM Plex Mono", ui-monospace, monospace;
+  --sl-font:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", "Helvetica Neue",
+    Arial, sans-serif;
+  --sl-font-mono:
+    ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
 }
 
+/* ---------- Single light theme, no dark mode ---------- */
+/* Nasdaq-anchored: white bg, near-black text, electric blue accent. */
+
+:root,
+:root[data-theme="light"],
 :root[data-theme="dark"] {
-  --sl-color-accent-low: #3a2a08;
-  --sl-color-accent: #d6a23a;
-  --sl-color-accent-high: #f3c45a;
-  --sl-color-bg: #0b0b0d;
-  --sl-color-bg-nav: #111114;
-  --sl-color-bg-sidebar: #0d0d10;
+  --sl-color-bg: #ffffff;
+  --sl-color-bg-nav: #ffffff;
+  --sl-color-bg-sidebar: #ffffff;
+  --sl-color-bg-inline-code: #f4f4f5;
+
+  --sl-color-white: #1d1d1f;
+  --sl-color-gray-1: #2a2a2e;
+  --sl-color-gray-2: #3f3f46;
+  --sl-color-gray-3: #52525b;
+  --sl-color-gray-4: #71717a;
+  --sl-color-gray-5: #a1a1aa;
+  --sl-color-gray-6: #e4e4e7;
+  --sl-color-gray-7: #f4f4f5;
+  --sl-color-black: #ffffff;
+
+  --sl-color-accent-low: #e6f2ff;
+  --sl-color-accent: #0090ff;
+  --sl-color-accent-high: #0560ad;
+
+  --sl-color-text: var(--sl-color-gray-2);
+  --sl-color-text-accent: var(--sl-color-accent-high);
+  --sl-color-hairline: #e4e4e7;
+  --sl-color-hairline-light: #f0f0f2;
+  --sl-color-hairline-shade: #d4d4d8;
+}
+
+/* ---------- Typography ---------- */
+
+body {
+  letter-spacing: -0.005em;
+}
+
+h1, h2, h3, h4 {
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--sl-color-white);
+}
+
+.hero h1 {
+  font-size: clamp(2.5rem, 1.8rem + 2.5vw, 3.75rem);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+}
+
+.hero .tagline {
+  font-size: clamp(1.05rem, 0.95rem + 0.4vw, 1.2rem);
+  color: var(--sl-color-gray-3);
+  max-width: 38rem;
+  line-height: 1.55;
+}
+
+.hero .actions a {
+  border-radius: 6px;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+}
+
+.sl-markdown-content :not(pre) > code {
+  background: var(--sl-color-bg-inline-code);
+  border: none;
+  font-size: 0.875em;
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+}
+
+hr,
+.right-sidebar {
+  border-color: var(--sl-color-hairline);
 }

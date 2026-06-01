@@ -1,14 +1,15 @@
 ---
 title: OpenCVM
-description: API open-source para o mercado de ações brasileiro — fatos relevantes, preços e fundamentos.
+description: Um registro aberto de dados do mercado de capitais brasileiro — fatos relevantes, preços e fundamentos em uma única API.
 template: splash
 hero:
-  tagline: API aberta para o mercado brasileiro. Fatos relevantes, preços e fundamentos — auto-hospedável ou consumida direto.
+  tagline: Um registro aberto de dados do mercado de capitais brasileiro. Fatos relevantes, preços e fundamentos — acessíveis através de uma única API.
   actions:
-    - text: Começar
+    - text: Acessar a documentação
       link: /pt/start/quickstart/
       icon: right-arrow
-    - text: GitHub
+      variant: primary
+    - text: Ver no GitHub
       link: https://github.com/opencvm/opencvm
       icon: external
       variant: minimal
@@ -16,17 +17,25 @@ hero:
 
 import { Card, CardGrid } from '@astrojs/starlight/components';
 
-<CardGrid stagger>
-  <Card title="Documentos CVM" icon="document">
-    ITR, DFP e FRE estruturados em JSON limpo.
+## O que o OpenCVM fornece
+
+<CardGrid>
+  <Card title="Documentos regulatórios">
+    ITR, DFP e FRE da Comissão de Valores Mobiliários, estruturados em JSON versionado.
   </Card>
-  <Card title="Preços" icon="seti:graphql">
-    Cotações de fechamento, splits e proventos — conferidos.
+  <Card title="Preços de referência">
+    Cotações de fechamento, eventos corporativos e proventos — extraídos da B3 e reconciliados com os documentos.
   </Card>
-  <Card title="Fundamentos" icon="seti:db">
-    Indicadores, crescimento e balanços por ticker e ano.
+  <Card title="Fundamentos">
+    Demonstrações financeiras plurianuais e indicadores derivados, comparáveis entre tickers e setores.
   </Card>
-  <Card title="Auto-hospedagem" icon="rocket">
-    Um docker compose, SQLite + Litestream para R2. Sem lock-in.
+  <Card title="Infraestrutura aberta">
+    Auto-hospedável em um único docker compose. SQLite + replicação Litestream. Sem lock-in.
   </Card>
 </CardGrid>
+
+## Construído para as instituições que constroem em cima
+
+O OpenCVM é a camada de dados. Gestoras, mesas de research, fintechs e times quantitativos
+constroem seus próprios analytics, screeners e dashboards em cima — através de uma API
+estável e versionada, ou auto-hospedando o stack completo.

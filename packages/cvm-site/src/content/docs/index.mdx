@@ -1,14 +1,15 @@
 ---
 title: OpenCVM
-description: Open-source API for Brazilian equities — filings, prices, fundamentals.
+description: An open registry of Brazilian capital-markets data — filings, prices, and fundamentals as a single API.
 template: splash
 hero:
-  tagline: A raw, open-source API for Brazilian equities. Filings, prices, fundamentals — yours to self-host or call directly.
+  tagline: An open registry of Brazilian capital-markets data. Filings, prices, and fundamentals — accessible as a single API.
   actions:
-    - text: Quickstart
+    - text: Read the documentation
       link: /start/quickstart/
       icon: right-arrow
-    - text: GitHub
+      variant: primary
+    - text: View on GitHub
       link: https://github.com/opencvm/opencvm
       icon: external
       variant: minimal
@@ -16,17 +17,25 @@ hero:
 
 import { Card, CardGrid } from '@astrojs/starlight/components';
 
-<CardGrid stagger>
-  <Card title="Filings" icon="document">
-    Structured CVM filings (ITR, DFP, FRE) parsed into clean JSON.
+## What OpenCVM provides
+
+<CardGrid>
+  <Card title="Regulatory filings">
+    Structured ITR, DFP and FRE filings from the Comissão de Valores Mobiliários, parsed into versioned JSON.
   </Card>
-  <Card title="Prices" icon="seti:graphql">
-    End-of-day prices, splits, dividends — sourced and reconciled.
+  <Card title="Reference prices">
+    End-of-day prices, corporate actions and dividends — sourced from B3 and reconciled against filings.
   </Card>
-  <Card title="Fundamentals" icon="seti:db">
-    Ratios, growth, balance-sheet snapshots across years and tickers.
+  <Card title="Fundamentals">
+    Multi-year financial statements and derived ratios, comparable across tickers and sectors.
   </Card>
-  <Card title="Self-host" icon="rocket">
-    One Docker compose, SQLite + Litestream to R2. No vendor lock-in.
+  <Card title="Open infrastructure">
+    Self-hostable in a single Docker compose. SQLite + Litestream replication. No vendor lock-in.
   </Card>
 </CardGrid>
+
+## Built for the institutions that build on it
+
+OpenCVM is the data layer. Asset managers, research desks, fintech products and quant teams
+build their own analytics, screeners and dashboards on top — through a stable, versioned API
+or by self-hosting the full stack.
