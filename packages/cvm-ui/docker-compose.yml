@@ -1,0 +1,19 @@
+# Standalone deployable for the OpenCVM frontend (SolidJS + Caddy).
+# Runs separately from packages/cvm/docker-compose.yml.
+#
+# Local dev:   just cvm-ui-dev    (Vite on :5174, proxies /api to FastAPI on :8000)
+# Container:   just cvm-ui-up     (Caddy on :5174, proxies /api to CVM_UPSTREAM)
+
+services:
+  ui:
+    image: ghcr.io/gabrielkoerich/cvm-ui:${CVM_UI_IMAGE_TAG:-latest}
+    build: .
+    container_name: cvm-ui
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5174:80"
+    environment:
+      # Point at the cvm FastAPI in prod; defaults to host.docker.internal for local.
+      CVM_UPSTREAM: ${CVM_UPSTREAM:-http://host.docker.internal:8000}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

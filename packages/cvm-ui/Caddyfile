@@ -1,0 +1,19 @@
+:80 {
+	root * /srv
+	encode zstd gzip
+
+	# SPA fallback — all unknown routes serve index.html
+	try_files {path} /index.html
+	file_server
+
+	# Proxy API to the cvm FastAPI service.
+	# CVM_UPSTREAM is set by docker-compose (e.g. http://api:8000).
+	@api path /api/*
+	reverse_proxy @api {$CVM_UPSTREAM:http://host.docker.internal:8000}
+
+	header {
+		# Reasonable defaults; tighten when behind a public CDN.
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+	}
+}
