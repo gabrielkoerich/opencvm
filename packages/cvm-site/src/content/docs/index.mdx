@@ -1,0 +1,32 @@
+---
+title: OpenCVM
+description: Open-source API for Brazilian equities — filings, prices, fundamentals.
+template: splash
+hero:
+  tagline: A raw, open-source API for Brazilian equities. Filings, prices, fundamentals — yours to self-host or call directly.
+  actions:
+    - text: Quickstart
+      link: /start/quickstart/
+      icon: right-arrow
+    - text: GitHub
+      link: https://github.com/opencvm/opencvm
+      icon: external
+      variant: minimal
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+<CardGrid stagger>
+  <Card title="Filings" icon="document">
+    Structured CVM filings (ITR, DFP, FRE) parsed into clean JSON.
+  </Card>
+  <Card title="Prices" icon="seti:graphql">
+    End-of-day prices, splits, dividends — sourced and reconciled.
+  </Card>
+  <Card title="Fundamentals" icon="seti:db">
+    Ratios, growth, balance-sheet snapshots across years and tickers.
+  </Card>
+  <Card title="Self-host" icon="rocket">
+    One Docker compose, SQLite + Litestream to R2. No vendor lock-in.
+  </Card>
+</CardGrid>

@@ -1,0 +1,19 @@
+@layer base, starlight, theme;
+@import "@astrojs/starlight-tailwind";
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+
+/* Match cvm-ui terminal aesthetic. */
+:root {
+  --sl-font: "IBM Plex Sans", system-ui, sans-serif;
+  --sl-font-mono: "IBM Plex Mono", ui-monospace, monospace;
+}
+
+:root[data-theme="dark"] {
+  --sl-color-accent-low: #3a2a08;
+  --sl-color-accent: #d6a23a;
+  --sl-color-accent-high: #f3c45a;
+  --sl-color-bg: #0b0b0d;
+  --sl-color-bg-nav: #111114;
+  --sl-color-bg-sidebar: #0d0d10;
+}

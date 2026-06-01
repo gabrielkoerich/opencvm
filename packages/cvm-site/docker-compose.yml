@@ -1,0 +1,14 @@
+# Standalone deployable for opencvm.org (Astro + Starlight static site).
+# Runs separately from packages/cvm/docker-compose.yml and packages/cvm-ui.
+#
+# Local dev:   just cvm-site-dev    (Astro on :4321)
+# Container:   just cvm-site-up     (Caddy on :5175)
+
+services:
+  site:
+    image: ghcr.io/gabrielkoerich/cvm-site:${CVM_SITE_IMAGE_TAG:-latest}
+    build: .
+    container_name: cvm-site
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5175:80"

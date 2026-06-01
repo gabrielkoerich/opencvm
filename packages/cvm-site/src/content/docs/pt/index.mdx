@@ -1,0 +1,32 @@
+---
+title: OpenCVM
+description: API open-source para o mercado de ações brasileiro — fatos relevantes, preços e fundamentos.
+template: splash
+hero:
+  tagline: API aberta para o mercado brasileiro. Fatos relevantes, preços e fundamentos — auto-hospedável ou consumida direto.
+  actions:
+    - text: Começar
+      link: /pt/start/quickstart/
+      icon: right-arrow
+    - text: GitHub
+      link: https://github.com/opencvm/opencvm
+      icon: external
+      variant: minimal
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+<CardGrid stagger>
+  <Card title="Documentos CVM" icon="document">
+    ITR, DFP e FRE estruturados em JSON limpo.
+  </Card>
+  <Card title="Preços" icon="seti:graphql">
+    Cotações de fechamento, splits e proventos — conferidos.
+  </Card>
+  <Card title="Fundamentos" icon="seti:db">
+    Indicadores, crescimento e balanços por ticker e ano.
+  </Card>
+  <Card title="Auto-hospedagem" icon="rocket">
+    Um docker compose, SQLite + Litestream para R2. Sem lock-in.
+  </Card>
+</CardGrid>
