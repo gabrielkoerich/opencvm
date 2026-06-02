@@ -27,7 +27,7 @@ const App: Component = () => (
       <Route path="/portfolios" component={Portfolios} />
       <Route path="/portfolios/:slug" component={Portfolios} />
       <Route path="/companies" component={Companies} />
-      <Route path="/companies/:ticker" component={Companies} />
+      <Route path="/companies/:cd_cvm" component={Companies} />
       <Route path="/compare" component={Compare} />
       <Route path="*" component={Screeners} />
     </Router>
