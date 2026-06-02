@@ -75,6 +75,18 @@ def _cmd_backup(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_render(args: argparse.Namespace) -> int:
+    from pathlib import Path
+
+    from . import render
+    from .db import init_db
+
+    init_db()
+    out = Path(cast("str", args.out)).resolve()
+    render.render_all(out)
+    return 0
+
+
 def _cmd_tickers(args: argparse.Namespace) -> int:
     from . import tickers
     from .db import init_db
@@ -112,6 +124,14 @@ def main() -> int:
     p_backup = sub.add_parser("backup", help="snapshot + S3 upload")
     p_backup.add_argument("--no-s3", action="store_true")
     p_backup.set_defaults(func=_cmd_backup)
+
+    p_render = sub.add_parser(
+        "render", help="render the entire read API to a static JSON tree"
+    )
+    p_render.add_argument(
+        "--out", required=True, help="output directory (will contain v1/ + manifest.json)"
+    )
+    p_render.set_defaults(func=_cmd_render)
 
     p_tk = sub.add_parser("tickers", help="refresh ccvm<->ticker map from B3")
     p_tk.add_argument("--stocks-json", default=None, help="legacy seed fallback")
