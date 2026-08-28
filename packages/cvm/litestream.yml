@@ -15,6 +15,7 @@ dbs:
         region: ${LITESTREAM_REGION}
         access-key-id: ${LITESTREAM_ACCESS_KEY_ID}
         secret-access-key: ${LITESTREAM_SECRET_ACCESS_KEY}
-        # Keep ~24h of WAL segments + a snapshot per day for 14 days.
-        retention: 336h
+        # A snapshot per day, kept 3 days. The DB compresses to ~1.6 GB, so a
+        # longer window blows past R2's 10 GB free tier (14 days cost 27 GiB).
+        retention: 72h
         snapshot-interval: 24h
