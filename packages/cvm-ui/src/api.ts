@@ -1,4 +1,4 @@
-// Thin fetch client. In dev, Vite proxies /api to FastAPI on :8000 (prefix stripped).
+// Thin fetch client. In dev, Vite proxies /api to FastAPI on :8347 (prefix stripped).
 // In prod, Caddy does the same for the cvm-api container.
 const BASE = "/api";
 

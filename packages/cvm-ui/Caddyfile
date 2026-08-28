@@ -7,9 +7,9 @@
 	file_server
 
 	# Proxy API to the cvm FastAPI service.
-	# CVM_UPSTREAM is set by docker-compose (e.g. http://api:8000).
+	# CVM_UPSTREAM is set by docker-compose (e.g. http://api:8347).
 	@api path /api/*
-	reverse_proxy @api {$CVM_UPSTREAM:http://host.docker.internal:8000}
+	reverse_proxy @api {$CVM_UPSTREAM:http://host.docker.internal:8347}
 
 	header {
 		# Reasonable defaults; tighten when behind a public CDN.

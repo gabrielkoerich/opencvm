@@ -111,7 +111,7 @@ def main() -> int:
 
     p_serve = sub.add_parser("serve", help="run the FastAPI server")
     p_serve.add_argument("--host", default="0.0.0.0")
-    p_serve.add_argument("--port", type=int, default=8000)
+    p_serve.add_argument("--port", type=int, default=8347)
     p_serve.add_argument("--workers", type=int, default=1)
     p_serve.set_defaults(func=_cmd_serve)
 

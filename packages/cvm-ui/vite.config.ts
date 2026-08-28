@@ -10,7 +10,7 @@ export default defineConfig({
       // FastAPI routes are mounted at root (/companies, /screen, …).
       // Strip the /api prefix before forwarding.
       "/api": {
-        target: "http://127.0.0.1:8000",
+        target: "http://127.0.0.1:8347",
         changeOrigin: false,
         rewrite: (path) => path.replace(/^\/api/, ""),
       },

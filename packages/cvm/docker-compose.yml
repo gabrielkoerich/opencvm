@@ -79,10 +79,10 @@ services:
   api:
     <<: *cvm-build
     restart: unless-stopped
-    command: ["python", "-m", "cvm", "serve", "--port", "8000"]
+    command: ["python", "-m", "cvm", "serve", "--port", "8347"]
     environment: *cvm-env
     ports:
-      - "8000:8000"
+      - "8347:8347"
     volumes:
       - cvm-data:/data
     depends_on:

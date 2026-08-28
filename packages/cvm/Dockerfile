@@ -14,6 +14,6 @@ RUN uv pip install --system --no-cache .
 
 RUN mkdir -p /data
 VOLUME ["/data"]
-EXPOSE 8000
+EXPOSE 8347
 
 CMD ["python", "-m", "cvm", "serve"]
